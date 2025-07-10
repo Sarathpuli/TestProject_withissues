@@ -1,769 +1,496 @@
-// Enhanced HomePage.tsx - Clean version with extracted StockSearch component
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+// Optimized HomePage.tsx - Addresses all issues
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User } from 'firebase/auth';
-import { signOut } from 'firebase/auth';
-import { auth, db, doc, getDoc, updateDoc } from '../firebase';
 import { 
+  BarChart3, 
   TrendingUp, 
-  TrendingDown,
-  User as UserIcon,
-  Settings,
-  LogOut,
-  UserCircle,
-  ChevronDown,
-  BarChart3,
-  DollarSign,
-  RefreshCw,
-  Bell,
-  Crown,
-  Lock,
-  PieChart,
-  GraduationCap,
-  LogIn,
-  UserPlus,
-  GitCompare,
-  BookOpen,
-  ChevronUp,
-  TrendingDown as Down,
-  Sparkles,
-  Target,
+  TrendingDown, 
+  Brain, 
+  PieChart, 
   Clock,
-  Cpu,
-  Shield,
-  ChevronRight,
-  Award,
-  Brain,
-  History,
-  Minus,
-  CheckSquare,
-  AlertTriangle,
-  HelpCircle,
-  ArrowRight,
+  RefreshCw,
+  Search,
   Star,
-  Search
+  Newspaper,
+  AlertTriangle,
+  Activity,
+  DollarSign,
+  ChevronRight,
+  Eye,
+  Sparkles,
+  UserPlus,
+  Lock,
+  Home,
+  CheckSquare,
+  ArrowUp,
+  ArrowDown,
+  Globe
 } from 'lucide-react';
 
-// Import components
-import AskAI from '../components/AskAI';
+// Core Components
+import ReusableHeader from '../components/ReusableHeader';
 import NewsSection from '../components/NewsSection';
 import StockQuiz from '../components/StockQuiz';
-import CompareStocks from '../components/CompareStocks';
-import EnhancedStockSearch from '../components/StockSearch';
+import AskAI from '../components/AskAI';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
+// Types
 interface HomePageProps {
-  user: User | null;
-  onPortfolioUpdate: () => void;
+  user: any;
+  onPortfolioUpdate?: () => void;
+}
+
+interface MarketData {
+  spy: { price: number; change: number; changePercent: number };
+  qqq: { price: number; change: number; changePercent: number };
+  dia: { price: number; change: number; changePercent: number };
+  vix: { price: number; change: number; changePercent: number };
+  lastUpdated: Date;
+}
+
+interface PortfolioHolding {
+  symbol: string;
+  shares: number;
+  avgPrice: number;
+  currentPrice: number;
+  value: number;
+  gainLoss: number;
+  gainLossPercent: number;
+}
+
+interface Portfolio {
+  totalValue: number;
+  dayChange: number;
+  dayChangePercent: number;
+  holdings: PortfolioHolding[];
 }
 
 // Backend API Configuration
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-// Portfolio interfaces
-interface PortfolioHolding {
-  symbol: string;
-  companyName?: string;
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  totalValue: number;
-  gainLoss: number;
-  gainLossPercent: number;
-  industry?: string;
-  sector?: string;
-  purchaseDate?: Date;
-}
-
-interface PortfolioSummary {
-  totalValue: number;
-  totalGainLoss: number;
-  totalGainLossPercent: number;
-  holdings: PortfolioHolding[];
-  watchlist: string[];
-}
-
-interface RecentlySearched {
-  symbol: string;
-  name: string;
-  timestamp: Date;
-  currentPrice?: number;
-}
-
-interface PortfolioAnalysis {
-  diversificationScore: number;
-  riskLevel: 'Low' | 'Medium' | 'High';
-  suggestions: string[];
-  topPerformer: string;
-  worstPerformer: string;
-  sectorAllocation: { [key: string]: number };
-}
-
-// Backend API helper functions
 const backendAPI = {
-  getStockQuote: async (symbol: string) => {
-    const response = await fetch(`${BACKEND_URL}/api/stocks/quote/${symbol}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch quote for ${symbol}`);
+  checkHealth: async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/health`);
+      return response.ok;
+    } catch {
+      return false;
     }
-    return response.json();
   },
 
-  checkHealth: async () => {
-    const response = await fetch(`${BACKEND_URL}/health`);
-    return response.ok;
-  }
-};
+  getMarketData: async (): Promise<MarketData> => {
+    try {
+      const symbols = ['SPY', 'QQQ', 'DIA', 'VIX'];
+      const promises = symbols.map(symbol => 
+        fetch(`${BACKEND_URL}/api/stocks/quote/${symbol}`)
+          .then(res => res.json())
+          .catch(() => null)
+      );
 
-// Utility functions for localStorage
-const getRecentlySearched = (): RecentlySearched[] => {
-  try {
-    const stored = localStorage.getItem('recentlySearched');
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-const addToRecentlySearched = (stock: RecentlySearched) => {
-  try {
-    const recent = getRecentlySearched();
-    const filtered = recent.filter(item => item.symbol !== stock.symbol);
-    const updated = [stock, ...filtered].slice(0, 10); // Keep only last 10
-    localStorage.setItem('recentlySearched', JSON.stringify(updated));
-  } catch (error) {
-    console.error('Error saving to recently searched:', error);
-  }
-};
-
-// Enhanced Loading Component
-const LoadingSpinner: React.FC<{ message?: string; size?: 'sm' | 'md' | 'lg' }> = ({ 
-  message = "Loading...", 
-  size = 'md' 
-}) => {
-  const sizeClasses = {
-    sm: 'h-4 w-4',
-    md: 'h-8 w-8',
-    lg: 'h-12 w-12'
-  };
-
-  return (
-    <div className="flex items-center justify-center p-8">
-      <div className="text-center">
-        <div className={`animate-spin rounded-full border-b-2 border-blue-400 mx-auto mb-3 ${sizeClasses[size]}`}></div>
-        <p className="text-gray-400 text-sm">{message}</p>
-      </div>
-    </div>
-  );
-};
-
-// Enhanced Metric Card Component
-const MetricCard: React.FC<{
-  label: string;
-  value: string;
-  icon: React.ComponentType<any>;
-  color?: string;
-  trend?: 'up' | 'down' | 'neutral';
-  subtitle?: string;
-  onClick?: () => void;
-  tooltip?: string;
-}> = ({ label, value, icon: Icon, color = "text-blue-400", trend, subtitle, onClick, tooltip }) => (
-  <div 
-    className={`bg-gradient-to-br from-gray-800 to-gray-750 p-4 rounded-xl border border-gray-700 hover:border-gray-600 transition-all duration-300 group ${onClick ? 'cursor-pointer hover:shadow-lg' : ''} relative`}
-    onClick={onClick}
-  >
-    {tooltip && (
-      <div className="absolute -top-2 -right-2 group-hover:visible invisible">
-        <div className="bg-gray-900 text-xs text-gray-300 p-2 rounded-lg shadow-lg max-w-xs">
-          {tooltip}
-        </div>
-      </div>
-    )}
-    <div className="flex items-center justify-between mb-3">
-      <Icon className={`w-5 h-5 ${color} group-hover:scale-110 transition-transform`} />
-      {trend && (
-        <div className={`flex items-center text-xs ${
-          trend === 'up' ? 'text-green-400' : 
-          trend === 'down' ? 'text-red-400' : 
-          'text-gray-400'
-        }`}>
-          {trend === 'up' && <TrendingUp className="w-3 h-3" />}
-          {trend === 'down' && <Down className="w-3 h-3" />}
-          {trend === 'neutral' && <Minus className="w-3 h-3" />}
-        </div>
-      )}
-    </div>
-    <div className="space-y-1">
-      <p className="text-xs text-gray-400 font-medium">{label}</p>
-      <p className="text-lg font-bold text-white">{value}</p>
-      {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-    </div>
-  </div>
-);
-
-// Portfolio Analysis Component
-const PortfolioAnalysis: React.FC<{ analysis: PortfolioAnalysis }> = ({ analysis }) => {
-  const getRiskColor = (risk: string) => {
-    switch (risk) {
-      case 'Low': return 'text-green-400 bg-green-900/20 border-green-600/30';
-      case 'Medium': return 'text-yellow-400 bg-yellow-900/20 border-yellow-600/30';
-      case 'High': return 'text-red-400 bg-red-900/20 border-red-600/30';
-      default: return 'text-gray-400 bg-gray-900/20 border-gray-600/30';
+      const results = await Promise.all(promises);
+      
+      return {
+        spy: results[0]?.quote ? {
+          price: results[0].quote.c,
+          change: results[0].quote.d,
+          changePercent: results[0].quote.dp
+        } : { price: 0, change: 0, changePercent: 0 },
+        qqq: results[1]?.quote ? {
+          price: results[1].quote.c,
+          change: results[1].quote.d,
+          changePercent: results[1].quote.dp
+        } : { price: 0, change: 0, changePercent: 0 },
+        dia: results[2]?.quote ? {
+          price: results[2].quote.c,
+          change: results[2].quote.d,
+          changePercent: results[2].quote.dp
+        } : { price: 0, change: 0, changePercent: 0 },
+        vix: results[3]?.quote ? {
+          price: results[3].quote.c,
+          change: results[3].quote.d,
+          changePercent: results[3].quote.dp
+        } : { price: 0, change: 0, changePercent: 0 },
+        lastUpdated: new Date()
+      };
+    } catch (error) {
+      console.error('Market data fetch error:', error);
+      throw error;
     }
-  };
-
-  const getDiversificationColor = (score: number) => {
-    if (score >= 80) return 'text-green-400';
-    if (score >= 60) return 'text-yellow-400';
-    return 'text-red-400';
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div className={`p-4 rounded-lg border ${getRiskColor(analysis.riskLevel)}`}>
-          <div className="flex items-center space-x-2 mb-2">
-            <Shield className="w-4 h-4" />
-            <span className="font-medium">Risk Level</span>
-          </div>
-          <p className="text-lg font-bold">{analysis.riskLevel}</p>
-        </div>
-        
-        <div className="p-4 bg-blue-900/20 border border-blue-600/30 rounded-lg">
-          <div className="flex items-center space-x-2 mb-2">
-            <BarChart3 className={`w-4 h-4 ${getDiversificationColor(analysis.diversificationScore)}`} />
-            <span className="font-medium text-blue-300">Diversification</span>
-          </div>
-          <p className={`text-lg font-bold ${getDiversificationColor(analysis.diversificationScore)}`}>
-            {analysis.diversificationScore}%
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-purple-900/20 border border-purple-600/30 p-4 rounded-lg">
-        <h4 className="font-medium text-purple-300 mb-3 flex items-center">
-          <Brain className="w-4 h-4 mr-2" />
-          AI Recommendations
-        </h4>
-        <div className="space-y-2">
-          {analysis.suggestions.map((suggestion, index) => (
-            <div key={index} className="flex items-start space-x-2 text-sm text-gray-300">
-              <CheckSquare className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
-              <span>{suggestion}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {analysis.topPerformer && analysis.worstPerformer && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-green-900/20 border border-green-600/30 p-4 rounded-lg">
-            <div className="flex items-center space-x-2 mb-1">
-              <Star className="w-4 h-4 text-green-400" />
-              <span className="text-sm font-medium text-green-300">Top Performer</span>
-            </div>
-            <p className="text-white font-semibold">{analysis.topPerformer}</p>
-          </div>
-          
-          <div className="bg-red-900/20 border border-red-600/30 p-4 rounded-lg">
-            <div className="flex items-center space-x-2 mb-1">
-              <AlertTriangle className="w-4 h-4 text-red-400" />
-              <span className="text-sm font-medium text-red-300">Needs Attention</span>
-            </div>
-            <p className="text-white font-semibold">{analysis.worstPerformer}</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  }
 };
 
-// Recently Searched Stocks Component
-const RecentlySearchedStocks: React.FC = () => {
-  const [recentStocks, setRecentStocks] = useState<RecentlySearched[]>([]);
-  const navigate = useNavigate();
+// Utility Functions
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+};
+
+const formatPercent = (value: number): string => {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+};
+
+const formatTime = (date: Date): string => {
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+};
+
+// Real-time Clock Component
+const RealTimeClock: React.FC = () => {
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    setRecentStocks(getRecentlySearched());
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, []);
 
-  if (recentStocks.length === 0) {
-    return (
-      <div className="text-center text-gray-400 py-6">
-        <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
-        <p className="text-sm">No recent searches</p>
-        <p className="text-xs text-gray-500">Search for stocks to see them here</p>
-      </div>
-    );
-  }
+  const isMarketOpen = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTime = hour * 60 + minutes;
+    
+    // Monday to Friday
+    if (day >= 1 && day <= 5) {
+      // 9:30 AM to 4:00 PM EST
+      const marketOpen = 9 * 60 + 30; // 9:30 AM
+      const marketClose = 16 * 60; // 4:00 PM
+      return currentTime >= marketOpen && currentTime < marketClose;
+    }
+    
+    return false;
+  };
+
+  const marketOpen = isMarketOpen();
 
   return (
-    <div className="space-y-3">
-      {recentStocks.slice(0, 5).map((stock, index) => (
-        <div
-          key={index}
-          onClick={() => navigate(`/stock/${stock.symbol}`)}
-          className="flex items-center justify-between p-3 bg-gray-700/30 hover:bg-gray-700/50 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xs">{stock.symbol.charAt(0)}</span>
-            </div>
-            <div>
-              <p className="font-medium text-white text-sm">{stock.symbol}</p>
-              <p className="text-xs text-gray-400 truncate max-w-32">{stock.name}</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            {stock.currentPrice && (
-              <span className="text-xs text-gray-400">${stock.currentPrice.toFixed(2)}</span>
-            )}
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </div>
-        </div>
-      ))}
+    <div className="flex items-center space-x-3">
+      <div className="flex items-center space-x-2">
+        <div className={`w-2 h-2 rounded-full ${marketOpen ? 'bg-green-400' : 'bg-red-400'}`}></div>
+        <span className="text-sm text-gray-300">
+          {marketOpen ? 'Market Open' : 'Market Closed'}
+        </span>
+      </div>
+      <div className="text-sm text-blue-300 font-mono">
+        {formatTime(currentTime)}
+      </div>
     </div>
   );
 };
 
-// Enhanced Portfolio Summary Component
-const PortfolioSummary: React.FC<{ user: User | null; refreshTrigger: number }> = ({ user, refreshTrigger }) => {
-  const [portfolio, setPortfolio] = useState<PortfolioSummary>({
-    totalValue: 0,
-    totalGainLoss: 0,
-    totalGainLossPercent: 0,
-    holdings: [],
-    watchlist: []
-  });
+// Compact Market Overview Component
+const CompactMarketOverview: React.FC = () => {
+  const [marketData, setMarketData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAllHoldings, setShowAllHoldings] = useState(false);
-  const [portfolioAnalysis, setPortfolioAnalysis] = useState<PortfolioAnalysis | null>(null);
 
-  // Analyze portfolio function
-  const analyzePortfolio = useCallback((holdings: PortfolioHolding[]): PortfolioAnalysis => {
-    if (holdings.length === 0) {
-      return {
-        diversificationScore: 0,
-        riskLevel: 'Low',
-        suggestions: ['Start building your portfolio by adding some stocks'],
-        topPerformer: '',
-        worstPerformer: '',
-        sectorAllocation: {}
-      };
-    }
-
-    // Calculate diversification score based on number of stocks and sector spread
-    const diversificationScore = Math.min(100, (holdings.length / 10) * 100);
-    
-    // Determine risk level based on volatility and concentration
-    let riskLevel: 'Low' | 'Medium' | 'High' = 'Medium';
-    if (holdings.length >= 10 && diversificationScore >= 80) riskLevel = 'Low';
-    if (holdings.length < 5 || diversificationScore < 50) riskLevel = 'High';
-
-    // Find best and worst performers
-    const sortedByPerformance = [...holdings].sort((a, b) => b.gainLossPercent - a.gainLossPercent);
-    const topPerformer = sortedByPerformance[0]?.symbol || '';
-    const worstPerformer = sortedByPerformance[sortedByPerformance.length - 1]?.symbol || '';
-
-    // Generate suggestions
-    const suggestions: string[] = [];
-    if (holdings.length < 5) {
-      suggestions.push('Consider adding more stocks for better diversification');
-    }
-    if (diversificationScore < 70) {
-      suggestions.push('Diversify across different sectors and industries');
-    }
-    const negativePerformers = holdings.filter(h => h.gainLossPercent < -10);
-    if (negativePerformers.length > 0) {
-      suggestions.push(`Review underperforming stocks: ${negativePerformers.map(h => h.symbol).join(', ')}`);
-    }
-    if (holdings.some(h => (h.totalValue / portfolio.totalValue) > 0.3)) {
-      suggestions.push('Consider reducing concentration in large positions');
-    }
-
-    return {
-      diversificationScore: Math.round(diversificationScore),
-      riskLevel,
-      suggestions: suggestions.length > 0 ? suggestions : ['Your portfolio looks well balanced!'],
-      topPerformer,
-      worstPerformer,
-      sectorAllocation: {}
-    };
-  }, [portfolio.totalValue]);
-
-  const fetchPortfolioData = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
+  const fetchMarketData = useCallback(async () => {
     try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (!userDoc.exists()) {
-        setLoading(false);
-        return;
-      }
-
-      const userData = userDoc.data();
-      const portfolioData = userData.portfolio || [];
-      
-      if (portfolioData.length === 0) {
-        setPortfolio({
-          totalValue: 0,
-          totalGainLoss: 0,
-          totalGainLossPercent: 0,
-          holdings: [],
-          watchlist: []
-        });
-        setPortfolioAnalysis(null);
-        setLoading(false);
-        return;
-      }
-
-      const holdings: PortfolioHolding[] = [];
-      const watchlistStocks: string[] = [];
-      let totalValue = 0;
-      let totalCost = 0;
-
-      for (const item of portfolioData) {
-        const { symbol, shares, avgPrice } = item;
-        
-        if (shares === 0) {
-          watchlistStocks.push(symbol);
-          continue;
-        }
-        
-        try {
-          // Get current stock data from backend
-          const stockData = await backendAPI.getStockQuote(symbol);
-          
-          if (stockData && stockData.quote && stockData.quote.c) {
-            const currentPrice = stockData.quote.c;
-            const totalStockValue = currentPrice * shares;
-            const totalStockCost = avgPrice * shares;
-            const gainLoss = totalStockValue - totalStockCost;
-            const gainLossPercent = totalStockCost > 0 ? (gainLoss / totalStockCost) * 100 : 0;
-
-            holdings.push({
-              symbol,
-              companyName: item.companyName || symbol,
-              shares,
-              avgPrice,
-              currentPrice,
-              totalValue: totalStockValue,
-              gainLoss,
-              gainLossPercent,
-              industry: item.industry,
-              sector: item.sector,
-              purchaseDate: item.purchaseDate
-            });
-
-            totalValue += totalStockValue;
-            totalCost += totalStockCost;
-          }
-        } catch (stockError) {
-          console.error(`Error fetching data for ${symbol}:`, stockError);
-        }
-      }
-
-      const totalGainLoss = totalValue - totalCost;
-      const totalGainLossPercent = totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
-
-      const portfolioSummary = {
-        totalValue,
-        totalGainLoss,
-        totalGainLossPercent,
-        holdings,
-        watchlist: watchlistStocks
-      };
-
-      setPortfolio(portfolioSummary);
-      
-      // Analyze portfolio
-      const analysis = analyzePortfolio(holdings);
-      setPortfolioAnalysis(analysis);
-
-    } catch (error) {
-      console.error('Error fetching portfolio:', error);
-      setError('Failed to load portfolio data');
+      setLoading(true);
+      setError(null);
+      const data = await backendAPI.getMarketData();
+      setMarketData(data);
+    } catch (err) {
+      console.error('Market data error:', err);
+      setError('Unable to load market data');
     } finally {
       setLoading(false);
     }
-  }, [user, analyzePortfolio]);
+  }, []);
 
   useEffect(() => {
-    fetchPortfolioData();
-  }, [fetchPortfolioData, refreshTrigger]);
-
-  if (!user) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-8 rounded-xl border border-gray-700">
-          <h3 className="text-xl font-semibold mb-6 text-white flex items-center">
-            <PieChart className="w-5 h-5 mr-2 text-green-400" />
-            Portfolio Overview
-          </h3>
-          <div className="text-center text-gray-400 py-12">
-            <Lock className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium mb-2">Authentication Required</p>
-            <p className="text-sm mb-6">Please log in to view your portfolio summary</p>
-            <Link
-              to="/login"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-            >
-              <LogIn className="w-4 h-4 mr-2" />
-              Sign In
-            </Link>
-          </div>
-        </div>
-        
-        {/* Recently Searched for non-users */}
-        <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-xl font-semibold mb-6 flex items-center text-white">
-            <History className="w-5 h-5 mr-2 text-purple-400" />
-            Recently Searched
-          </h3>
-          <RecentlySearchedStocks />
-        </div>
-      </div>
-    );
-  }
+    fetchMarketData();
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchMarketData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchMarketData]);
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="bg-gray-800 p-6 rounded-xl border border-gray-700 animate-pulse">
-            <div className="h-6 bg-gray-700 rounded w-1/2 mb-4"></div>
-            <div className="space-y-4">
-              {[...Array(4)].map((_, j) => (
-                <div key={j} className="h-4 bg-gray-700 rounded"></div>
-              ))}
-            </div>
+      <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-4 rounded-lg border border-blue-800/30">
+        <div className="animate-pulse">
+          <div className="h-4 bg-blue-600/20 rounded w-1/3 mb-3"></div>
+          <div className="grid grid-cols-4 gap-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="space-y-2">
+                <div className="h-3 bg-blue-600/20 rounded"></div>
+                <div className="h-4 bg-blue-600/20 rounded"></div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <div className="text-center text-red-400 py-8">
-            <AlertTriangle className="w-12 h-12 mx-auto mb-3" />
-            <p className="text-lg font-medium mb-2">Error Loading Portfolio</p>
-            <p className="text-sm">{error}</p>
-            <button 
-              onClick={fetchPortfolioData}
-              className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white text-sm transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
+      <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-4 rounded-lg border border-blue-800/30">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-medium text-blue-300 flex items-center">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Market Overview
+          </h4>
+          <RealTimeClock />
+        </div>
+        <div className="text-center py-4">
+          <AlertTriangle className="w-6 h-6 text-red-400 mx-auto mb-2" />
+          <p className="text-sm text-red-300">{error}</p>
+          <button
+            onClick={fetchMarketData}
+            className="mt-2 text-xs text-blue-400 hover:text-blue-300 flex items-center mx-auto"
+          >
+            <RefreshCw className="w-3 h-3 mr-1" />
+            Retry
+          </button>
         </div>
       </div>
     );
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const formatPercent = (percent: number) => {
-    return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
-  };
-
-  const totalInvested = portfolio.holdings.reduce((sum, holding) => sum + (holding.avgPrice * holding.shares), 0);
+  const marketItems = [
+    { label: 'S&P 500', data: marketData?.spy, symbol: 'SPY' },
+    { label: 'NASDAQ', data: marketData?.qqq, symbol: 'QQQ' },
+    { label: 'Dow Jones', data: marketData?.dia, symbol: 'DIA' },
+    { label: 'VIX', data: marketData?.vix, symbol: 'VIX' }
+  ];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Portfolio Performance Overview with Recently Searched */}
-      <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
-        <h3 className="text-xl font-semibold mb-6 flex items-center text-white">
-          <BarChart3 className="w-5 h-5 mr-2 text-green-400" />
-          Portfolio Overview
-        </h3>
-        
-        {!portfolio || portfolio.holdings.length === 0 ? (
-          <div className="text-center text-gray-400 py-8">
-            <PieChart className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-lg font-medium mb-2">No Holdings</p>
-            <p className="text-sm">Start building your portfolio by searching for stocks above</p>
+    <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-4 rounded-lg border border-blue-800/30">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-medium text-blue-300 flex items-center">
+          <BarChart3 className="w-4 h-4 mr-2" />
+          Market Overview
+        </h4>
+        <RealTimeClock />
+      </div>
+      
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {marketItems.map((item, index) => (
+          <div key={index} className="text-center">
+            <p className="text-xs text-gray-400 mb-1">{item.label}</p>
+            <p className="text-sm font-medium text-white">
+              {item.data?.price ? formatCurrency(item.data.price) : 'N/A'}
+            </p>
+            <p className={`text-xs flex items-center justify-center ${
+              (item.data?.changePercent || 0) >= 0 ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {(item.data?.changePercent || 0) >= 0 ? 
+                <ArrowUp className="w-3 h-3 mr-1" /> : 
+                <ArrowDown className="w-3 h-3 mr-1" />
+              }
+              {formatPercent(item.data?.changePercent || 0)}
+            </p>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="bg-blue-900/20 border border-blue-600/30 p-4 rounded-lg">
-              <div className="flex items-center space-x-2 mb-2">
-                <DollarSign className="w-4 h-4 text-blue-400" />
-                <span className="text-sm font-medium text-blue-300">Total Value</span>
-              </div>
-              <p className="text-2xl font-bold text-white">{formatCurrency(portfolio.totalValue)}</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-700/30 p-3 rounded-lg">
-                <p className="text-xs text-gray-400 mb-1">Invested</p>
-                <p className="text-lg font-semibold text-white">{formatCurrency(totalInvested)}</p>
-              </div>
-              <div className={`p-3 rounded-lg ${portfolio.totalGainLoss >= 0 ? 'bg-green-900/20' : 'bg-red-900/20'}`}>
-                <p className="text-xs text-gray-400 mb-1">P&L</p>
-                <p className={`text-lg font-semibold ${portfolio.totalGainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {formatCurrency(portfolio.totalGainLoss)}
-                </p>
-              </div>
-            </div>
-            
-            <div className={`p-4 rounded-lg border ${portfolio.totalGainLoss >= 0 ? 'bg-green-900/20 border-green-600/30' : 'bg-red-900/20 border-red-600/30'}`}>
-              <div className="flex items-center space-x-2 mb-2">
-                {portfolio.totalGainLoss >= 0 ? <TrendingUp className="w-4 h-4 text-green-400" /> : <TrendingDown className="w-4 h-4 text-red-400" />}
-                <span className={`text-sm font-medium ${portfolio.totalGainLoss >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                  Total Return
-                </span>
-              </div>
-              <p className={`text-xl font-bold ${portfolio.totalGainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {formatPercent(portfolio.totalGainLossPercent)}
-              </p>
-            </div>
-            
-            <MetricCard
-              label="Total Holdings"
-              value={`${portfolio.holdings.length} stocks`}
-              icon={BarChart3}
-              color="text-purple-400"
-            />
-          </div>
-        )}
+        ))}
+      </div>
+      
+      {marketData?.lastUpdated && (
+        <div className="mt-3 pt-2 border-t border-blue-800/30">
+          <p className="text-xs text-gray-500 text-center">
+            Last updated: {marketData.lastUpdated.toLocaleTimeString()}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
 
-        {/* Recently Searched Section */}
-        <div className="mt-8 pt-6 border-t border-gray-600">
-          <h4 className="text-lg font-semibold mb-4 flex items-center text-white">
-            <History className="w-4 h-4 mr-2 text-purple-400" />
-            Recently Searched
-          </h4>
-          <RecentlySearchedStocks />
+// Compact Portfolio Summary Component
+const CompactPortfolioSummary: React.FC<{ user: any }> = ({ user }) => {
+  const [portfolio, setPortfolio] = useState<Portfolio>({
+    totalValue: 0,
+    dayChange: 0,
+    dayChangePercent: 0,
+    holdings: []
+  });
+
+  const mockPortfolio: Portfolio = useMemo(() => ({
+    totalValue: 45750.30,
+    dayChange: 1250.75,
+    dayChangePercent: 2.81,
+    holdings: [
+      {
+        symbol: 'AAPL',
+        shares: 50,
+        avgPrice: 180.25,
+        currentPrice: 185.50,
+        value: 9275.00,
+        gainLoss: 262.50,
+        gainLossPercent: 2.91
+      },
+      {
+        symbol: 'MSFT',
+        shares: 30,
+        avgPrice: 340.80,
+        currentPrice: 355.20,
+        value: 10656.00,
+        gainLoss: 432.00,
+        gainLossPercent: 4.22
+      },
+      {
+        symbol: 'GOOGL',
+        shares: 25,
+        avgPrice: 125.60,
+        currentPrice: 131.25,
+        value: 3281.25,
+        gainLoss: 141.25,
+        gainLossPercent: 4.50
+      }
+    ]
+  }), []);
+
+  useEffect(() => {
+    if (user) {
+      setPortfolio(mockPortfolio);
+    }
+  }, [user, mockPortfolio]);
+
+  if (!user) {
+    return (
+      <div className="bg-gradient-to-br from-gray-800/80 to-gray-750/80 p-4 rounded-lg border border-gray-700">
+        <div className="text-center">
+          <Lock className="w-8 h-8 mx-auto mb-3 text-gray-500" />
+          <p className="text-sm font-medium text-gray-300 mb-2">Portfolio Tracking</p>
+          <p className="text-xs text-gray-500 mb-3">Sign in to track your investments</p>
+          <Link
+            to="/signup"
+            className="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+          >
+            <UserPlus className="w-3 h-3 mr-1" />
+            Get Started
+          </Link>
         </div>
       </div>
+    );
+  }
 
-      {/* Enhanced Holdings */}
-      <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold flex items-center text-white">
-            <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
-            Holdings
-          </h3>
-          {portfolio.holdings.length > 3 && (
-            <button
-              onClick={() => setShowAllHoldings(!showAllHoldings)}
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center"
-            >
-              {showAllHoldings ? 'Show Less' : 'Show All'}
-              {showAllHoldings ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
-            </button>
-          )}
+  return (
+    <div className="bg-gradient-to-br from-gray-800/80 to-gray-750/80 p-4 rounded-lg border border-gray-700">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-medium text-white flex items-center">
+          <PieChart className="w-4 h-4 mr-2 text-green-400" />
+          Portfolio
+        </h4>
+        <Link
+          to="/portfolio"
+          className="text-xs text-blue-400 hover:text-blue-300 flex items-center"
+        >
+          View All
+          <ChevronRight className="w-3 h-3 ml-1" />
+        </Link>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Total Value</span>
+          <span className="text-sm font-medium text-white">
+            {formatCurrency(portfolio.totalValue)}
+          </span>
         </div>
         
-        {portfolio.holdings.length === 0 ? (
-          <div className="text-center text-gray-400 py-12">
-            <DollarSign className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium mb-2">No Holdings Yet</p>
-            <p className="text-sm">Add stocks to your portfolio to see them here</p>
-          </div>
-        ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {portfolio.holdings
-              .sort((a, b) => b.totalValue - a.totalValue)
-              .slice(0, showAllHoldings ? undefined : 5)
-              .map((holding, index) => (
-              <div key={index} className="p-4 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-all duration-200 cursor-pointer" onClick={() => window.open(`/stock/${holding.symbol}`, '_blank')}>
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                      <span className="text-white font-bold text-sm">{holding.symbol.charAt(0)}</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-white">{holding.symbol}</p>
-                      <p className="text-sm text-gray-400">{holding.shares} shares @ ${holding.avgPrice.toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-white">{formatCurrency(holding.totalValue)}</p>
-                    <p className="text-xs text-gray-400">${holding.currentPrice.toFixed(2)}</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="text-center">
-                    <p className="text-gray-400">Invested</p>
-                    <p className="text-white font-medium">{formatCurrency(holding.avgPrice * holding.shares)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-gray-400">P&L Amount</p>
-                    <p className={`font-medium ${holding.gainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {formatCurrency(holding.gainLoss)}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-gray-400">P&L %</p>
-                    <p className={`font-medium flex items-center justify-center ${holding.gainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {holding.gainLoss >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <Down className="w-3 h-3 mr-1" />}
-                      {formatPercent(holding.gainLossPercent)}
-                    </p>
-                  </div>
-                </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Today's Change</span>
+          <span className={`text-sm font-medium flex items-center ${
+            portfolio.dayChange >= 0 ? 'text-green-400' : 'text-red-400'
+          }`}>
+            {portfolio.dayChange >= 0 ? 
+              <TrendingUp className="w-3 h-3 mr-1" /> : 
+              <TrendingDown className="w-3 h-3 mr-1" />
+            }
+            {formatCurrency(Math.abs(portfolio.dayChange))} ({formatPercent(portfolio.dayChangePercent)})
+          </span>
+        </div>
+
+        <div className="pt-2 border-t border-gray-700">
+          <p className="text-xs text-gray-500 mb-2">Top Holdings</p>
+          <div className="space-y-1">
+            {portfolio.holdings.slice(0, 3).map((holding, index) => (
+              <div key={index} className="flex items-center justify-between">
+                <span className="text-xs text-gray-300">{holding.symbol}</span>
+                <span className={`text-xs ${
+                  holding.gainLossPercent >= 0 ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {formatPercent(holding.gainLossPercent)}
+                </span>
               </div>
             ))}
           </div>
-        )}
+        </div>
       </div>
+    </div>
+  );
+};
 
-      {/* AI Portfolio Guidance */}
-      <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
-        <h3 className="text-xl font-semibold mb-6 flex items-center text-white">
-          <Brain className="w-5 h-5 mr-2 text-purple-400" />
-          AI Portfolio Guidance
-        </h3>
-        
-        {portfolio.holdings.length === 0 ? (
-          <div className="text-center text-gray-400 py-12">
-            <Brain className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium mb-2">No Portfolio Data</p>
-            <p className="text-sm mb-6">Add some stocks to get AI-powered portfolio insights</p>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2 text-sm text-blue-300 bg-blue-900/20 p-3 rounded-lg">
-                <CheckSquare className="w-4 h-4" />
-                <span>Portfolio diversification analysis</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-green-300 bg-green-900/20 p-3 rounded-lg">
-                <CheckSquare className="w-4 h-4" />
-                <span>Risk assessment & recommendations</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-purple-300 bg-purple-900/20 p-3 rounded-lg">
-                <CheckSquare className="w-4 h-4" />
-                <span>Performance optimization tips</span>
-              </div>
-            </div>
-          </div>
-        ) : portfolioAnalysis ? (
-          <PortfolioAnalysis analysis={portfolioAnalysis} />
-        ) : (
-          <LoadingSpinner message="Analyzing your portfolio..." size="sm" />
-        )}
+// Quick Search Component
+const QuickSearch: React.FC = () => {
+  const [query, setQuery] = useState('');
+  const navigate = useNavigate();
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim()) {
+      navigate(`/stock/${query.toUpperCase()}`);
+      setQuery('');
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-gray-800/80 to-gray-750/80 p-4 rounded-lg border border-gray-700">
+      <h4 className="text-sm font-medium text-white mb-3 flex items-center">
+        <Search className="w-4 h-4 mr-2 text-blue-400" />
+        Quick Stock Analysis
+      </h4>
+      
+      <form onSubmit={handleSearch} className="space-y-3">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Enter stock symbol (e.g., AAPL)"
+          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm placeholder-gray-400 focus:outline-none focus:border-blue-500"
+        />
+        <button
+          type="submit"
+          disabled={!query.trim()}
+          className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-sm rounded transition-colors flex items-center justify-center"
+        >
+          <Search className="w-3 h-3 mr-2" />
+          Analyze Stock
+        </button>
+      </form>
+
+      <div className="mt-3 pt-3 border-t border-gray-700">
+        <p className="text-xs text-gray-500 mb-2">Popular Stocks</p>
+        <div className="flex flex-wrap gap-1">
+          {['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'NVDA'].map((symbol) => (
+            <button
+              key={symbol}
+              onClick={() => navigate(`/stock/${symbol}`)}
+              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-xs text-gray-300 rounded transition-colors"
+            >
+              {symbol}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
 };
 
 // Main HomePage Component
-const HomePage: React.FC<HomePageProps> = ({ user, onPortfolioUpdate }) => {
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [isMarketOpen, setIsMarketOpen] = useState(false);
-  const [marketHours, setMarketHours] = useState('');
+const HomePage: React.FC<HomePageProps> = ({ user }) => {
   const [serverStatus, setServerStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const navigate = useNavigate();
 
@@ -779,385 +506,94 @@ const HomePage: React.FC<HomePageProps> = ({ user, onPortfolioUpdate }) => {
     };
 
     checkServerHealth();
-    const interval = setInterval(checkServerHealth, 30000); // Check every 30s
-    return () => clearInterval(interval);
   }, []);
-
-  // Market hours logic
-  useEffect(() => {
-    const updateMarketStatus = () => {
-      const now = new Date();
-      const day = now.getDay();
-      const hour = now.getHours();
-      const minute = now.getMinutes();
-      
-      const isWeekday = day >= 1 && day <= 5;
-      const currentTime = hour * 60 + minute;
-      const marketOpen = 9 * 60 + 30; // 9:30 AM
-      const marketClose = 16 * 60; // 4:00 PM
-      
-      const isOpen = isWeekday && currentTime >= marketOpen && currentTime < marketClose;
-      setIsMarketOpen(isOpen);
-      
-      if (isOpen) {
-        setMarketHours(`Open until 4:00 PM ET`);
-      } else if (isWeekday && currentTime < marketOpen) {
-        setMarketHours(`Opens at 9:30 AM ET`);
-      } else {
-        setMarketHours('Closed - Opens Monday 9:30 AM ET');
-      }
-    };
-
-    updateMarketStatus();
-    const interval = setInterval(updateMarketStatus, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Handle portfolio updates
-  const handlePortfolioUpdate = useCallback(() => {
-    setRefreshTrigger(prev => prev + 1);
-    onPortfolioUpdate();
-  }, [onPortfolioUpdate]);
-
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      navigate('/login');
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 text-white">
-      {/* Header */}
-      <header className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link to="/" className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-xl font-bold text-white">TechInvestorAI</span>
-              </Link>
-            </div>
+      <ReusableHeader 
+        user={user}
+        variant="home" 
+        title="Intelligent Stock Analysis"
+        showBackButton={false}
+      />
 
-            <div className="flex items-center space-x-4">
-              {/* Server Status */}
-              <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs ${
-                serverStatus === 'online' ? 'bg-green-900/30 text-green-300' :
-                serverStatus === 'offline' ? 'bg-red-900/30 text-red-300' :
-                'bg-yellow-900/30 text-yellow-300'
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Header Section with proper spacing */}
+        <div className="mb-8">
+          <div className="text-center mb-6">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-purple-400 to-blue-500 bg-clip-text text-transparent">
+              Intelligent Stock Analysis
+            </h1>
+            <p className="text-lg text-gray-300 max-w-2xl mx-auto">
+              Make smarter investment decisions with AI-powered analysis and real-time market data
+            </p>
+          </div>
+
+          {/* Server Status Indicator */}
+          {serverStatus !== 'checking' && (
+            <div className="flex justify-center mb-6">
+              <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs ${
+                serverStatus === 'online' 
+                  ? 'bg-green-900/30 text-green-400 border border-green-800' 
+                  : 'bg-red-900/30 text-red-400 border border-red-800'
               }`}>
                 <div className={`w-2 h-2 rounded-full ${
-                  serverStatus === 'online' ? 'bg-green-400' :
-                  serverStatus === 'offline' ? 'bg-red-400' :
-                  'bg-yellow-400'
+                  serverStatus === 'online' ? 'bg-green-400' : 'bg-red-400'
                 }`}></div>
-                <span>{serverStatus === 'online' ? 'Online' : serverStatus === 'offline' ? 'Offline' : 'Checking'}</span>
+                <span>{serverStatus === 'online' ? 'Real-time data enabled' : 'Using cached data'}</span>
               </div>
-
-              {user ? (
-                <div className="flex items-center space-x-4">
-                  <button className="p-2 text-gray-400 hover:text-white transition-colors relative">
-                    <Bell className="w-5 h-5" />
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
-                  </button>
-
-                  <Link
-                    to="/upgrade-pro"
-                    className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center hover:scale-105"
-                  >
-                    <Crown className="w-4 h-4 mr-2" />
-                    Upgrade Pro
-                  </Link>
-
-                  <div className="relative group">
-                    <button className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-700 transition-colors">
-                      <UserCircle className="w-6 h-6 text-gray-400" />
-                      <span className="text-white hidden md:block">{user.displayName || user.email}</span>
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
-                    </button>
-                    
-                    <div className="absolute right-0 mt-2 w-48 bg-gray-700 rounded-lg shadow-lg border border-gray-600 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                      <Link
-                        to="/account"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:bg-gray-600 rounded-t-lg transition-colors"
-                      >
-                        <UserIcon className="w-4 h-4 mr-2" />
-                        Account
-                      </Link>
-                      <Link
-                        to="/settings"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:bg-gray-600 transition-colors"
-                      >
-                        <Settings className="w-4 h-4 mr-2" />
-                        Settings
-                      </Link>
-                      <button
-                        onClick={handleLogout}
-                        className="flex items-center w-full px-4 py-2 text-gray-300 hover:bg-gray-600 rounded-b-lg transition-colors"
-                      >
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Sign Out
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-3">
-                  <Link
-                    to="/login"
-                    className="flex items-center px-4 py-2 text-gray-300 hover:text-white transition-colors"
-                  >
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Sign In
-                  </Link>
-                  <Link
-                    to="/signup"
-                    className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                  >
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Sign Up
-                  </Link>
-                </div>
-              )}
             </div>
-          </div>
+          )}
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-              Welcome{user ? `, ${user.displayName || user.email?.split('@')[0]}` : ''}! 👋
-            </h1>
-            <p className="text-gray-400 mt-2 text-lg">
-              {user 
-                ? 'Search stocks, get insights, and track your portfolio.'
-                : 'Search stocks, get insights, and track your portfolio.'
-              }
-            </p>
-            {!user && (
-              <p className="text-sm text-blue-400 mt-3 flex items-center">
-                <Sparkles className="w-4 h-4 mr-1" />
-                Login or Sign up to unlock all features including portfolio tracking, AI assistant, and more!
-              </p>
-            )}
+        {/* Compact Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Market Overview - Full width on mobile, 2 cols on desktop */}
+          <div className="lg:col-span-2">
+            <CompactMarketOverview />
           </div>
           
-          {/* Market Status Widget */}
-          <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-4 rounded-xl border border-gray-700">
-            <div className="flex items-center space-x-3 mb-2">
-              <div className={`w-3 h-3 rounded-full ${isMarketOpen ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
-              <span className="text-sm font-semibold">{isMarketOpen ? 'Market Open' : 'Market Closed'}</span>
-            </div>
-            <p className="text-xs text-gray-400 flex items-center">
-              <Clock className="w-3 h-3 mr-1" />
-              {marketHours}
-            </p>
+          {/* Portfolio Summary */}
+          <div>
+            <CompactPortfolioSummary user={user} />
           </div>
         </div>
 
-        {/* Search and Ask AI Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
-            <h3 className="text-xl font-semibold mb-6 flex items-center">
-              <BarChart3 className="w-5 h-5 mr-2 text-green-400" />
-              Stock Search
-              {!user && <span className="ml-2 text-xs text-gray-400 bg-green-900/20 px-2 py-1 rounded-full">(Always Available)</span>}
-            </h3>
-            <EnhancedStockSearch user={user} onPortfolioUpdate={handlePortfolioUpdate} />
-          </div>
-
-          <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
-            <h3 className="text-xl font-semibold mb-6 flex items-center">
-              <Cpu className="w-5 h-5 mr-2 text-blue-400" />
-              AI Assistant
-              <span className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-yellow-100 rounded-full flex items-center">
-                <Crown className="w-3 h-3 mr-1" />
-                Pro
-              </span>
-            </h3>
+        {/* Second Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Quick Search */}
+          <QuickSearch />
+          
+          {/* AI Assistant */}
+          <div className="bg-gradient-to-br from-gray-800/80 to-gray-750/80 p-4 rounded-lg border border-gray-700">
             {user ? (
               <AskAI user={user} />
             ) : (
-              <div className="text-center text-gray-400 py-12">
-                <Lock className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium mb-2">Authentication Required</p>
-                <p className="text-sm mb-6">Sign up to access our AI investment assistant</p>
+              <div className="text-center">
+                <Brain className="w-8 h-8 mx-auto mb-3 text-purple-400" />
+                <p className="text-sm font-medium text-white mb-2">AI Investment Assistant</p>
+                <p className="text-xs text-gray-500 mb-3">Get personalized investment insights</p>
                 <Link
                   to="/signup"
-                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg transition-all duration-200 hover:scale-105"
+                  className="inline-flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
                 >
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Get Started
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  Try AI Assistant
                 </Link>
               </div>
             )}
           </div>
         </div>
 
-        {/* Portfolio Section */}
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-3xl font-bold flex items-center">
-              <PieChart className="w-7 h-7 mr-3 text-green-400" />
-              Portfolio Overview
-            </h2>
-            {user && (
-              <button
-                onClick={() => setRefreshTrigger(prev => prev + 1)}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-all duration-200 hover:scale-105"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>Refresh</span>
-              </button>
-            )}
-          </div>
-          
-          <PortfolioSummary user={user} refreshTrigger={refreshTrigger} />
-        </section>
-
-        {/* Compare Stocks Section */}
-        <section className="mb-8">
-          <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
-            <h2 className="text-3xl font-bold mb-6 flex items-center">
-              <GitCompare className="w-7 h-7 mr-3 text-purple-400" />
-              Compare Stocks
-            </h2>
-            
-            <CompareStocks />
-            
-            {!user && (
-              <div className="mt-6 p-4 bg-blue-900/20 border border-blue-600/30 rounded-lg">
-                <p className="text-blue-300 text-sm flex items-center">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Login to save comparisons and access advanced analytics.
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Learning Resources for Beginners */}
-        <section className="mb-8">
-          <div className="bg-gradient-to-br from-green-900/20 to-green-800/20 p-8 rounded-xl border border-green-700/30 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-green-600/20 rounded-xl backdrop-blur-sm">
-                  <GraduationCap className="w-8 h-8 text-green-400" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-white">Learn Investing</h3>
-                  <p className="text-gray-300">Master the fundamentals of stock market investing</p>
-                </div>
-              </div>
-              <BookOpen className="w-12 h-12 text-green-400 opacity-30" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="bg-green-900/20 p-6 rounded-xl border border-green-700/30 backdrop-blur-sm">
-                <h4 className="font-semibold text-green-300 mb-3 flex items-center">
-                  <BarChart3 className="w-5 h-5 mr-2" />
-                  Stock Basics
-                </h4>
-                <p className="text-sm text-gray-300 mb-4">Understand P/E ratios, market cap, dividends, and key metrics</p>
-                <div className="flex items-center text-xs text-green-400">
-                  <Award className="w-3 h-3 mr-1" />
-                  <span>Beginner Friendly</span>
-                </div>
-              </div>
-              <div className="bg-green-900/20 p-6 rounded-xl border border-green-700/30 backdrop-blur-sm">
-                <h4 className="font-semibold text-green-300 mb-3 flex items-center">
-                  <Target className="w-5 h-5 mr-2" />
-                  Portfolio Building
-                </h4>
-                <p className="text-sm text-gray-300 mb-4">Learn diversification, risk management, and asset allocation</p>
-                <div className="flex items-center text-xs text-yellow-400">
-                  <Star className="w-3 h-3 mr-1" />
-                  <span>Intermediate</span>
-                </div>
-              </div>
-              <div className="bg-green-900/20 p-6 rounded-xl border border-green-700/30 backdrop-blur-sm">
-                <h4 className="font-semibold text-green-300 mb-3 flex items-center">
-                  <Search className="w-5 h-5 mr-2" />
-                  Research Methods
-                </h4>
-                <p className="text-sm text-gray-300 mb-4">Fundamental and technical analysis techniques</p>
-                <div className="flex items-center text-xs text-orange-400">
-                  <Brain className="w-3 h-3 mr-1" />
-                  <span>Advanced</span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => navigate('/learning')}
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-4 rounded-xl flex items-center justify-center space-x-3 transition-all duration-200 font-medium hover:scale-105"
-            >
-              <GraduationCap className="w-6 h-6" />
-              <span className="text-lg">Start Learning</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </div>
-        </section>
-
-        {/* Beginner Progress Tracker */}
-        {user && (
-          <section className="mb-8">
-            <div className="bg-gradient-to-br from-purple-900/20 to-blue-900/20 p-6 rounded-xl border border-purple-700/30">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-white flex items-center">
-                  <Target className="w-6 h-6 mr-3 text-purple-400" />
-                  Your Investment Journey
-                </h3>
-                <div className="text-sm text-purple-300 bg-purple-900/30 px-3 py-1 rounded-full">
-                  Beginner
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-purple-900/20 p-4 rounded-lg border border-purple-600/30">
-                  <div className="flex items-center space-x-3 mb-3">
-                    <CheckSquare className="w-5 h-5 text-green-400" />
-                    <span className="font-medium text-white">Account Setup</span>
-                  </div>
-                  <p className="text-sm text-gray-300">Portfolio tracking enabled</p>
-                </div>
-
-                <div className="bg-purple-900/20 p-4 rounded-lg border border-purple-600/30">
-                  <div className="flex items-center space-x-3 mb-3">
-                    <Clock className="w-5 h-5 text-yellow-400" />
-                    <span className="font-medium text-white">First Investment</span>
-                  </div>
-                  <p className="text-sm text-gray-300">Add your first stock</p>
-                </div>
-
-                <div className="bg-purple-900/20 p-4 rounded-lg border border-purple-600/30">
-                  <div className="flex items-center space-x-3 mb-3">
-                    <HelpCircle className="w-5 h-5 text-gray-400" />
-                    <span className="font-medium text-white">Diversification</span>
-                  </div>
-                  <p className="text-sm text-gray-300">Build a balanced portfolio</p>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Bottom Grid - News and Quiz */}
+        {/* Bottom Section - News and Quiz */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
+          {/* News Section */}
+          <div className="bg-gradient-to-br from-gray-800/80 to-gray-750/80 p-4 rounded-lg border border-gray-700">
             <NewsSection />
           </div>
           
-          <div className="bg-gradient-to-br from-gray-800 to-gray-750 p-6 rounded-xl border border-gray-700">
+          {/* Stock Quiz */}
+          <div className="bg-gradient-to-br from-gray-800/80 to-gray-750/80 p-4 rounded-lg border border-gray-700">
             <StockQuiz />
           </div>
         </div>

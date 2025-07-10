@@ -19,7 +19,7 @@ import {
   Activity,
   DollarSign,
   WifiOff,
-  Limit
+  Timer // Fixed: Using Timer instead of non-existent 'Limit'
 } from 'lucide-react';
 
 interface NewsItem {
@@ -88,7 +88,43 @@ const newsAPI = {
   }
 };
 
-// Enhanced News Item Component (keeping your UI design)
+// Market Summary Component
+const MarketSummary: React.FC = () => {
+  const [marketData, setMarketData] = useState({
+    djia: { price: 34156.28, change: 245.67, changePercent: 0.72 },
+    sp500: { price: 4398.95, change: 18.43, changePercent: 0.42 },
+    nasdaq: { price: 14329.12, change: -24.56, changePercent: -0.17 }
+  });
+
+  return (
+    <div className="mb-6 p-4 bg-gradient-to-r from-gray-700/50 to-gray-600/50 rounded-lg border border-gray-600/50">
+      <h4 className="text-sm font-semibold text-gray-300 mb-3 flex items-center">
+        <BarChart3 className="w-4 h-4 mr-2" />
+        Market Overview
+      </h4>
+      <div className="grid grid-cols-3 gap-4">
+        {Object.entries(marketData).map(([key, data]) => (
+          <div key={key} className="text-center">
+            <div className="text-xs text-gray-400 uppercase mb-1">
+              {key === 'djia' ? 'Dow' : key === 'sp500' ? 'S&P 500' : 'Nasdaq'}
+            </div>
+            <div className="text-sm font-bold text-white">
+              {data.price.toLocaleString()}
+            </div>
+            <div className={`text-xs flex items-center justify-center ${
+              data.change >= 0 ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {data.change >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+              {data.changePercent > 0 ? '+' : ''}{data.changePercent.toFixed(2)}%
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Enhanced News Item Component
 const NewsItemCard: React.FC<{ news: NewsItem; index: number; featured?: boolean }> = ({ news, index, featured = false }) => {
   const timeAgo = (timestamp: number) => {
     const minutes = Math.floor((Date.now() - timestamp) / (1000 * 60));
@@ -101,119 +137,41 @@ const NewsItemCard: React.FC<{ news: NewsItem; index: number; featured?: boolean
   };
 
   const getCategoryColor = (category?: string) => {
-    const colors: { [key: string]: string } = {
-      'Markets': 'bg-blue-500/20 text-blue-300',
-      'Technology': 'bg-purple-500/20 text-purple-300',
-      'Energy': 'bg-green-500/20 text-green-300',
-      'Healthcare': 'bg-red-500/20 text-red-300',
-      'Banking': 'bg-yellow-500/20 text-yellow-300',
-      'Crypto': 'bg-orange-500/20 text-orange-300',
-      'Global': 'bg-indigo-500/20 text-indigo-300',
-      'Consumer': 'bg-pink-500/20 text-pink-300'
-    };
-    return colors[category || 'Markets'] || 'bg-gray-500/20 text-gray-300';
-  };
-
-  const handleClick = () => {
-    if (news.url && news.url.startsWith('http')) {
-      window.open(news.url, '_blank');
+    switch (category?.toLowerCase()) {
+      case 'markets': return 'bg-blue-900/30 text-blue-300';
+      case 'earnings': return 'bg-green-900/30 text-green-300';
+      case 'crypto': return 'bg-orange-900/30 text-orange-300';
+      case 'tech': return 'bg-purple-900/30 text-purple-300';
+      default: return 'bg-gray-700/30 text-gray-300';
     }
   };
 
-  if (featured) {
-    return (
-      <div 
-        onClick={handleClick}
-        className="group relative p-6 bg-gradient-to-br from-blue-900/10 via-gray-800 to-purple-900/10 hover:from-blue-900/20 hover:to-purple-900/20 rounded-xl border border-blue-600/20 hover:border-blue-500/40 transition-all duration-500 cursor-pointer overflow-hidden"
-      >
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-500/10 to-transparent transform -skew-y-1"></div>
-        </div>
-        
-        <div className="relative space-y-4">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2">
-                <Star className="w-4 h-4 text-yellow-400" />
-                <span className="text-sm font-medium text-yellow-300">Breaking News</span>
-              </div>
-              {news.category && (
-                <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(news.category)}`}>
-                  {news.category}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Headline */}
-          <h3 className="text-xl font-bold text-white line-clamp-2 group-hover:text-blue-300 transition-colors leading-tight">
-            {news.headline}
-          </h3>
-
-          {/* Summary */}
-          {news.summary && (
-            <p className="text-gray-300 line-clamp-3 leading-relaxed">
-              {news.summary}
-            </p>
-          )}
-
-          {/* Footer */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-700/50">
-            <div className="flex items-center space-x-4 text-sm text-gray-400">
-              <span className="flex items-center">
-                <Globe className="w-4 h-4 mr-1" />
-                {news.source}
-              </span>
-              <span className="flex items-center">
-                <Clock className="w-4 h-4 mr-1" />
-                {timeAgo(news.datetime)}
-              </span>
-              {news.readTime && (
-                <span className="flex items-center">
-                  <Eye className="w-4 h-4 mr-1" />
-                  {news.readTime} min read
-                </span>
-              )}
-            </div>
-            
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClick();
-              }}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 rounded-lg transition-all duration-200 hover:scale-105 text-sm font-medium"
-            >
-              <span>Read Full Story</span>
-              <ExternalLink className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleClick = () => {
+    window.open(news.url, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div 
+      className={`group cursor-pointer transition-all duration-300 hover:scale-[1.02] ${
+        featured 
+          ? 'p-6 bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-lg border border-blue-600/50 shadow-lg'
+          : 'p-4 bg-gray-700/30 rounded-lg border border-gray-600/30 hover:border-gray-500/50'
+      }`}
       onClick={handleClick}
-      className="group p-4 bg-gradient-to-br from-gray-700/50 to-gray-750/50 hover:from-gray-600/60 hover:to-gray-700/60 rounded-lg border border-gray-600/50 hover:border-gray-500/60 transition-all duration-300 hover:shadow-lg cursor-pointer hover:scale-[1.02] hover:-translate-y-1"
     >
       <div className="space-y-3">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex justify-between items-start">
           <div className="flex items-center space-x-2">
-            <span className="text-xs text-gray-400 flex items-center">
-              <Globe className="w-3 h-3 mr-1" />
-              {news.source}
+            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(news.category)}`}>
+              {news.category || 'News'}
             </span>
-            {news.category && (
-              <>
-                <span className="text-xs text-gray-500">•</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${getCategoryColor(news.category)}`}>
-                  {news.category}
-                </span>
-              </>
+            <span className="text-xs text-gray-500">{news.source}</span>
+            {featured && (
+              <span className="text-xs bg-gradient-to-r from-yellow-600 to-orange-600 text-white px-2 py-1 rounded-full flex items-center">
+                <Star className="w-3 h-3 mr-1" />
+                Featured
+              </span>
             )}
           </div>
           <span className="text-xs text-gray-500 flex items-center">
@@ -222,25 +180,28 @@ const NewsItemCard: React.FC<{ news: NewsItem; index: number; featured?: boolean
           </span>
         </div>
 
-        {/* Headline */}
-        <h4 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-blue-300 transition-colors leading-snug">
-          {news.headline}
-        </h4>
-
-        {/* Summary */}
-        {news.summary && (
-          <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
-            {news.summary}
-          </p>
-        )}
+        {/* Content */}
+        <div className="space-y-2">
+          <h4 className={`font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-2 ${
+            featured ? 'text-lg' : 'text-sm'
+          }`}>
+            {news.headline}
+          </h4>
+          
+          {news.summary && (
+            <p className={`text-gray-400 line-clamp-3 ${featured ? 'text-sm' : 'text-xs'}`}>
+              {news.summary}
+            </p>
+          )}
+        </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3 text-xs text-gray-500">
             {news.readTime && (
               <span className="flex items-center">
                 <Eye className="w-3 h-3 mr-1" />
-                {news.readTime}m
+                {news.readTime}m read
               </span>
             )}
             <span className="flex items-center">
@@ -265,7 +226,7 @@ const NewsItemCard: React.FC<{ news: NewsItem; index: number; featured?: boolean
   );
 };
 
-// Loading Component (keeping your design)
+// Loading Component
 const NewsLoading: React.FC = () => (
   <div className="space-y-4">
     {[...Array(4)].map((_, index) => (
@@ -292,7 +253,7 @@ const NewsError: React.FC<{ error: string; onRetry: () => void }> = ({ error, on
   const getErrorConfig = () => {
     if (error.includes('rate limit') || error.includes('quota') || error.includes('429')) {
       return {
-        icon: Limit,
+        icon: Timer, // Fixed: Using Timer instead of non-existent 'Limit'
         title: 'API Rate Limit Exceeded',
         message: 'We\'ve reached the daily limit for news requests. Please try again later or consider upgrading to a premium plan.',
         color: 'orange',
@@ -327,118 +288,59 @@ const NewsError: React.FC<{ error: string; onRetry: () => void }> = ({ error, on
 
   const config = getErrorConfig();
   const Icon = config.icon;
-  
-  const colorClasses = {
-    orange: 'from-orange-900/20 to-yellow-900/20 border-orange-600/30 text-orange-300',
-    red: 'from-red-900/20 to-red-800/20 border-red-600/30 text-red-300',
-    yellow: 'from-yellow-900/20 to-yellow-800/20 border-yellow-600/30 text-yellow-300'
-  };
 
   return (
-    <div className={`p-6 bg-gradient-to-r ${colorClasses[config.color]} border rounded-xl`}>
-      <div className="text-center space-y-4">
-        <div className="flex justify-center">
-          <div className={`w-16 h-16 rounded-full bg-${config.color}-500/20 flex items-center justify-center`}>
-            <Icon className={`w-8 h-8 text-${config.color}-400`} />
-          </div>
-        </div>
-        
-        <div>
-          <h3 className="text-lg font-semibold mb-2">{config.title}</h3>
-          <p className="text-sm leading-relaxed opacity-90">
-            {config.message}
-          </p>
-        </div>
-
-        {config.showRetry && (
-          <button
-            onClick={onRetry}
-            className={`px-6 py-2 bg-${config.color}-600/30 hover:bg-${config.color}-600/50 text-${config.color}-300 rounded-lg transition-all duration-200 hover:scale-105 font-medium`}
-          >
-            Try Again
-          </button>
-        )}
-
-        <div className="pt-4 border-t border-current/20">
-          <p className="text-xs opacity-60">
-            Error Details: {error}
-          </p>
-        </div>
-      </div>
+    <div className={`text-center py-8 px-4 bg-${config.color}-900/20 rounded-lg border border-${config.color}-600/30`}>
+      <Icon className={`w-12 h-12 text-${config.color}-400 mx-auto mb-4`} />
+      <h4 className="text-lg font-semibold text-white mb-2">{config.title}</h4>
+      <p className="text-gray-400 text-sm mb-4 max-w-md mx-auto leading-relaxed">
+        {config.message}
+      </p>
+      {config.showRetry && (
+        <button
+          onClick={onRetry}
+          className={`px-4 py-2 bg-${config.color}-600 hover:bg-${config.color}-700 text-white rounded-lg transition-colors flex items-center space-x-2 mx-auto`}
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>Try Again</span>
+        </button>
+      )}
     </div>
   );
 };
 
-// Market Summary Component (keeping your design but with real data structure)
-const MarketSummary: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Simulate market data loading
-    setTimeout(() => setLoading(false), 800);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-xl border border-blue-800/30 mb-6">
-        <div className="animate-pulse">
-          <div className="h-4 bg-blue-600/20 rounded w-1/3 mb-4"></div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="text-center space-y-2">
-                <div className="h-3 bg-blue-600/20 rounded w-16 mx-auto"></div>
-                <div className="h-4 bg-blue-600/20 rounded w-20 mx-auto"></div>
-                <div className="h-3 bg-blue-600/20 rounded w-12 mx-auto"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-4 bg-gradient-to-r from-blue-900/20 via-indigo-900/20 to-purple-900/20 rounded-xl border border-blue-800/30 mb-6 hover:border-blue-700/50 transition-all duration-300">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-sm font-semibold text-blue-300 flex items-center">
-          <BarChart3 className="w-4 h-4 mr-2" />
-          Market Overview
-        </h4>
-        <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-400">Real-time data requires API upgrade</span>
-        </div>
-      </div>
-      
-      <div className="text-center py-8">
-        <WifiOff className="w-8 h-8 text-gray-500 mx-auto mb-3" />
-        <p className="text-sm text-gray-400">Market data temporarily unavailable</p>
-        <p className="text-xs text-gray-500 mt-1">Enable market data API for live updates</p>
-      </div>
-    </div>
-  );
-};
-
-// Main Enhanced NewsSection Component
+// Main NewsSection Component
 const NewsSection: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [backendOnline, setBackendOnline] = useState(true);
+  const [backendOnline, setBackendOnline] = useState(false);
 
-  // Fetch real news from API
-  const fetchNews = async () => {
-    setLoading(true);
-    setError(null);
+  // Check backend status
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const isHealthy = await newsAPI.checkHealth();
+        setBackendOnline(isHealthy);
+      } catch {
+        setBackendOnline(false);
+      }
+    };
     
+    checkBackend();
+    const interval = setInterval(checkBackend, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch news function
+  const fetchNews = async () => {
     try {
-      // Check if backend is online first
-      const isOnline = await newsAPI.checkHealth();
-      setBackendOnline(isOnline);
+      setError(null);
       
-      if (!isOnline) {
-        throw new Error('News service is currently offline. Please try again later.');
+      if (!backendOnline) {
+        throw new Error('Backend service is currently offline. Please try again later.');
       }
 
       const newsData = await newsAPI.getFinancialNews();

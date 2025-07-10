@@ -1,19 +1,15 @@
-// AskAI.tsx - Updated to use backend APIs
+// AskAI.tsx - Clean, minimal design inspired by screener.in
 import React, { useState, useRef, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { 
-  Zap, 
   Send, 
   RefreshCw, 
-  MessageCircle, 
-  AlertCircle, 
-  CheckCircle,
-  Lightbulb,
-  TrendingUp,
-  DollarSign,
-  BarChart3,
+  AlertCircle,
+  User as UserIcon,
   Crown,
-  Lock
+  MessageCircle,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 
 // Backend API Configuration
@@ -42,7 +38,6 @@ interface ConversationItem {
 
 // Backend API helper functions
 const backendAPI = {
-  // Ask AI question
   askAI: async (message: string, context?: string) => {
     const response = await fetch(`${BACKEND_URL}/api/ai/ask`, {
       method: 'POST',
@@ -68,23 +63,20 @@ const AskAI: React.FC<AskAIProps> = ({ user }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null);
 
-  // Check if user is Pro (simplified check)
+  // Check if user is Pro
   const isPro = user && localStorage.getItem('userPlan') === 'pro';
-  const dailyLimit = isPro ? 100 : 5; // Pro users get 100 questions per day, free users get 5
+  const dailyLimit = isPro ? 100 : 5;
 
-  // Suggested questions for beginners
-  const suggestedQuestions = [
-    "What is a stock and how does it work?",
-    "How do I start investing with $1000?",
-    "What's the difference between stocks and bonds?",
-    "How do I analyze a company before investing?",
-    "What is diversification and why is it important?",
-    "Should I invest in index funds or individual stocks?",
-    "How do I manage investment risk?",
-    "What are dividend stocks and are they good for beginners?"
+  // Common investment questions
+  const commonQuestions = [
+    "What is P/E ratio and how do I use it?",
+    "How do I analyze a company's financial health?",
+    "What's the difference between value and growth investing?",
+    "How much should I diversify my portfolio?",
+    "When should I buy or sell a stock?"
   ];
 
-  // Load daily usage from localStorage
+  // Load daily usage
   useEffect(() => {
     const today = new Date().toDateString();
     const savedDate = localStorage.getItem('aiUsageDate');
@@ -93,25 +85,23 @@ const AskAI: React.FC<AskAIProps> = ({ user }) => {
     if (savedDate === today && savedUsage) {
       setDailyUsage(parseInt(savedUsage, 10));
     } else {
-      // Reset usage for new day
       setDailyUsage(0);
       localStorage.setItem('aiUsageDate', today);
       localStorage.setItem('aiUsageCount', '0');
     }
   }, []);
 
-  // Auto-scroll to bottom of conversation
+  // Auto-expand when there are conversations
+  useEffect(() => {
+    if (conversation.length > 0) {
+      setIsExpanded(true);
+    }
+  }, [conversation.length]);
+
+  // Auto-scroll conversation
   useEffect(() => {
     conversationEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
-    }
-  }, [question]);
 
   const updateDailyUsage = () => {
     const newUsage = dailyUsage + 1;
@@ -124,21 +114,19 @@ const AskAI: React.FC<AskAIProps> = ({ user }) => {
     
     if (!queryText) return;
 
-    // Check daily limit for free users
     if (!isPro && dailyUsage >= dailyLimit) {
-      setError('Daily question limit reached. Upgrade to Pro for unlimited AI assistance!');
+      setError('Daily limit reached. Upgrade to Pro for unlimited questions.');
       return;
     }
 
     if (!user) {
-      setError('Please sign in to ask AI questions.');
+      setError('Please sign in to ask questions.');
       return;
     }
 
     setLoading(true);
     setError(null);
 
-    // Add user question to conversation
     const userMessage: ConversationItem = {
       id: Date.now().toString(),
       type: 'user',
@@ -148,14 +136,12 @@ const AskAI: React.FC<AskAIProps> = ({ user }) => {
     setConversation(prev => [...prev, userMessage]);
 
     try {
-      // Get AI response from backend
       const context = `User is ${isPro ? 'a Pro subscriber' : 'on the free plan'}. Previous conversation: ${
         conversation.slice(-2).map(c => `${c.type}: ${c.message}`).join('; ')
       }`;
       
       const aiResponse: AIResponse = await backendAPI.askAI(queryText, context);
 
-      // Add AI response to conversation
       const aiMessage: ConversationItem = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -187,199 +173,196 @@ const AskAI: React.FC<AskAIProps> = ({ user }) => {
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold flex items-center text-white">
-          <Zap className="w-5 h-5 mr-2 text-purple-400" />
-          AI Investment Assistant
-          {isPro && <Crown className="w-4 h-4 ml-2 text-yellow-400" />}
-        </h2>
-        
-        <div className="flex items-center space-x-2">
-          {/* Usage indicator */}
-          <div className="text-xs text-gray-400">
-            {dailyUsage}/{dailyLimit} today
+    <div className="bg-gray-800 rounded-lg border border-gray-700">
+      {/* Header */}
+      <div className="p-6 border-b border-gray-700">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-white">
+            AI Assistant
+            {isPro && <Crown className="w-4 h-4 inline ml-2 text-yellow-400" />}
+          </h2>
+          
+          <div className="flex items-center space-x-4">
+            <div className="text-sm text-gray-400">
+              {dailyUsage}/{dailyLimit} questions today
+            </div>
+            
+            {conversation.length > 0 && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-gray-400 hover:text-white"
+                title={isExpanded ? "Hide conversation" : "Show conversation"}
+              >
+                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            )}
           </div>
-          
-          {conversation.length > 0 && (
-            <button
-              onClick={clearConversation}
-              className="p-1 hover:bg-gray-700 rounded transition-colors"
-              title="Clear conversation"
-            >
-              <RefreshCw className="w-4 h-4 text-gray-400" />
-            </button>
-          )}
-          
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1 hover:bg-gray-700 rounded transition-colors"
-            title={isExpanded ? "Minimize" : "Expand"}
-          >
-            <MessageCircle className="w-4 h-4 text-gray-400" />
-          </button>
         </div>
       </div>
 
-      {/* Usage warning for free users */}
-      {!isPro && dailyUsage >= dailyLimit - 1 && (
-        <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-600 rounded-lg">
-          <div className="flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4 text-yellow-400" />
-            <span className="text-yellow-300 text-sm">
-              {dailyUsage >= dailyLimit 
-                ? 'Daily limit reached! Upgrade to Pro for unlimited AI assistance.'
-                : 'Almost at your daily limit. Upgrade to Pro for unlimited questions!'}
-            </span>
+      {/* Error Display */}
+      {error && (
+        <div className="p-4 border-b border-gray-700">
+          <div className="flex items-center space-x-2 text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4" />
+            <span>{error}</span>
           </div>
         </div>
       )}
 
-      {/* Conversation Area */}
+      {/* Conversation History */}
       {isExpanded && conversation.length > 0 && (
-        <div className="mb-4 max-h-80 overflow-y-auto bg-gray-700 rounded-lg p-4 space-y-3">
-          {conversation.map((item) => (
-            <div key={item.id} className={`flex ${item.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] p-3 rounded-lg ${
-                item.type === 'user' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-600 text-gray-100'
-              }`}>
-                <div className="text-sm whitespace-pre-wrap">{item.message}</div>
-                <div className="text-xs opacity-70 mt-1">
-                  {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        <div className="p-6 border-b border-gray-700">
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {conversation.map((item) => (
+              <div key={item.id} className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  {item.type === 'user' ? (
+                    <UserIcon className="w-4 h-4 text-blue-400" />
+                  ) : (
+                    <MessageCircle className="w-4 h-4 text-green-400" />
+                  )}
+                  <span className="text-sm font-medium text-gray-300">
+                    {item.type === 'user' ? 'You' : 'AI Assistant'}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="ml-6 text-sm text-gray-200 whitespace-pre-wrap">
+                  {item.message}
                 </div>
               </div>
+            ))}
+            <div ref={conversationEndRef} />
+          </div>
+          
+          {conversation.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-700">
+              <button
+                onClick={clearConversation}
+                className="text-sm text-gray-400 hover:text-white"
+              >
+                Clear conversation
+              </button>
             </div>
-          ))}
-          <div ref={conversationEndRef} />
-        </div>
-      )}
-
-      {/* Error Display */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-600 rounded-lg flex items-center space-x-2">
-          <AlertCircle className="w-4 h-4 text-red-400" />
-          <span className="text-red-300 text-sm">{error}</span>
+          )}
         </div>
       )}
 
       {/* Question Input */}
-      <div className="space-y-4">
-        <div className="relative">
-          <textarea
-            ref={textareaRef}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={
-              !user 
-                ? "Please sign in to ask questions..." 
-                : !isPro && dailyUsage >= dailyLimit
-                ? "Daily limit reached. Upgrade to Pro for unlimited questions!"
-                : "Ask me anything about investing, stocks, or financial planning..."
-            }
-            disabled={!user || loading || (!isPro && dailyUsage >= dailyLimit)}
-            className="w-full p-3 pr-12 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none min-h-[80px] disabled:opacity-50 disabled:cursor-not-allowed"
-            rows={1}
-          />
-          <button
-            onClick={() => handleSubmit()}
-            disabled={!user || !question.trim() || loading || (!isPro && dailyUsage >= dailyLimit)}
-            className="absolute bottom-3 right-3 p-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-          >
-            {loading ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4" />
+      <div className="p-6">
+        {!user ? (
+          <div className="text-center py-8">
+            <UserIcon className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-2">Sign in to use AI Assistant</h3>
+            <p className="text-gray-400 mb-4">Get personalized investment advice and analysis</p>
+            <div className="space-x-3">
+              <button
+                onClick={() => window.location.href = '/login'}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => window.location.href = '/signup'}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded"
+              >
+                Sign Up
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Input Area */}
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={
+                  !isPro && dailyUsage >= dailyLimit
+                    ? "Daily limit reached. Upgrade to Pro for unlimited questions."
+                    : "Ask about stocks, investing strategies, or financial analysis..."
+                }
+                disabled={loading || (!isPro && dailyUsage >= dailyLimit)}
+                className="w-full p-3 pr-12 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 resize-none disabled:opacity-50"
+                rows={3}
+              />
+              <button
+                onClick={() => handleSubmit()}
+                disabled={!question.trim() || loading || (!isPro && dailyUsage >= dailyLimit)}
+                className="absolute bottom-3 right-3 p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded"
+              >
+                {loading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+
+            {/* Common Questions */}
+            {conversation.length === 0 && !question && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-3">Common Questions</h3>
+                <div className="space-y-2">
+                  {commonQuestions.map((commonQuestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSubmit(commonQuestion)}
+                      disabled={loading || (!isPro && dailyUsage >= dailyLimit)}
+                      className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded text-sm text-gray-300 border border-gray-600 hover:border-gray-500"
+                    >
+                      {commonQuestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-          </button>
+
+            {/* Usage Warning */}
+            {!isPro && dailyUsage >= dailyLimit - 1 && (
+              <div className="p-3 bg-yellow-900/20 border border-yellow-600/50 rounded">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-yellow-400">
+                      {dailyUsage >= dailyLimit ? 'Daily limit reached' : 'Almost at limit'}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      Upgrade to Pro for unlimited questions
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => window.location.href = '/upgrade-pro'}
+                    className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-sm"
+                  >
+                    Upgrade
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Pro Features Footer */}
+      {user && !isPro && (
+        <div className="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-gray-400">
+              Want unlimited AI questions and advanced features?
+            </div>
+            <button
+              onClick={() => window.location.href = '/upgrade-pro'}
+              className="text-blue-400 hover:text-blue-300"
+            >
+              Upgrade to Pro →
+            </button>
+          </div>
         </div>
-
-        {/* Suggested Questions */}
-        {conversation.length === 0 && !question && (
-          <div>
-            <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center">
-              <Lightbulb className="w-4 h-4 mr-2 text-yellow-400" />
-              Popular Questions
-            </h3>
-            <div className="grid grid-cols-1 gap-2">
-              {suggestedQuestions.slice(0, 4).map((suggestedQuestion, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleSubmit(suggestedQuestion)}
-                  disabled={!user || loading || (!isPro && dailyUsage >= dailyLimit)}
-                  className="text-left p-3 bg-gray-700 hover:bg-gray-600 disabled:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm text-gray-300 transition-colors border border-gray-600 hover:border-gray-500"
-                >
-                  {suggestedQuestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pro Upgrade Prompt for Free Users */}
-        {!isPro && (
-          <div className="p-4 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-600/30 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-yellow-400 mb-1">Unlock Unlimited AI Power</h3>
-                <p className="text-sm text-gray-300">
-                  Get unlimited AI questions, advanced insights, and priority responses with Pro.
-                </p>
-              </div>
-              <div className="flex flex-col items-center space-y-2">
-                <Crown className="w-8 h-8 text-yellow-400" />
-                <button
-                  onClick={() => window.open('/upgrade-pro', '_blank')}
-                  className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Upgrade Now
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Sign In Prompt */}
-        {!user && (
-          <div className="p-4 bg-blue-900/30 border border-blue-600/30 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium text-blue-400 mb-1">Sign In to Get Started</h3>
-                <p className="text-sm text-gray-300">
-                  Create a free account to start asking AI questions about investing.
-                </p>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => window.location.href = '/login'}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => window.location.href = '/signup'}
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Sign Up
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* AI Tips */}
-      <div className="mt-4 p-3 bg-gray-700/50 rounded-lg">
-        <h4 className="text-xs font-medium text-gray-400 mb-2">💡 Tips for better AI responses:</h4>
-        <ul className="text-xs text-gray-500 space-y-1">
-          <li>• Be specific about your investment goals and risk tolerance</li>
-          <li>• Include your experience level (beginner, intermediate, advanced)</li>
-          <li>• Ask about specific stocks, sectors, or investment strategies</li>
-          <li>• Request explanations in simple terms if you're new to investing</li>
-        </ul>
-      </div>
+      )}
     </div>
   );
 };

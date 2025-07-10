@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { auth } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import StockComparisonPage from './pages/StockComparisonPage';
 
 // Components
 import HomePage from './pages/HomePage';
@@ -68,6 +69,9 @@ function App() {
           
           {/* Privacy & Security */}
           <Route path="/privacy-security" element={<PrivacySecurityPage />} />
+
+          {/*Stock Comparision Page*/}
+          <Route path="/stock-comparison" element={<StockComparisonPage />} />
           
           {/* You can add more routes as needed */}
           <Route path="/learning" element={<LearningPage />} />
